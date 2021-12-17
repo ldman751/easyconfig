@@ -15,10 +15,10 @@
     数据包括：section 和(配置项、默认值、配置说明) 三元组
 ```python
     EasyConfig\
-        .append("section1", 
-                ("option1".1, "defaut_value", "comment"),
-                ("option1".2, "comment"),
-                )
+        .register("section1", 
+                 ("option1".1, "defaut_value", "comment"),
+                 ("option1".2, "comment"),
+                 )
 ```
     如果没有 defauolt_value，三元组可简写为：(option1, comment)
 
