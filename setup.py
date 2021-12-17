@@ -1,9 +1,9 @@
 from setuptools import setup
 
 setup(
-    name='option_manager',
+    name='easyconfig',
     version='0.9.0',
-    packages=['option_manager'],
+    packages=['easyconfig'],
     url='https://github.com/jeackchn/option_manager',
     license='MIT',
     author='jeack_chen',
