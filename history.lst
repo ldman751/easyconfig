@@ -53,3 +53,7 @@ easyconfig项目延用了option_manager项目中的 OptionPack & OptionInfo,添�
         sp(option1) or sp(option1, default)
         sp(option2) or sp(option2, default)
 
+3. Bug 修复:
+    case1: ConfigParser 中 section 是区分大小写，而 option 不区分。
+    case2: ConfigParser 在读取 section，option 时，如当前 section 内未配置 option，会自动到 DEFAULT section 找
+    遵从上述逻辑，重新整理了代码。

@@ -11,6 +11,7 @@ import re
 from collections import defaultdict
 from configparser import NoSectionError, NoOptionError
 
+
 _UNSET = object()
 
 
@@ -46,28 +47,37 @@ class SectionPack:
     def __init__(self, conf, sections):
         self._options = {}
         alias = defaultdict(set)
+
         for section in sections:
-            for arg in EasyConfig.info.get_options(section):
-                if len(arg) < 2:
-                    continue
-                lower_option = arg[0].lower()
-                self._options[lower_option] = OptionPack(conf, section, *arg[:-1])
-                field = OptionPack.to_field_name(lower_option)
-                if field[0].isalpha() or can_field(field[0]):
-                    alias[field].add(lower_option)
-                    setattr(self, field, self._options[lower_option])
+            for field, option in self.setup_section(conf, section, EasyConfig.info.get_options(section)):
+                alias[field].add(option)
+        if OptionInfo.kDefault not in sections:
+            for field, option in self.setup_section(conf, sections[-1], EasyConfig.info.get_options()):
+                alias[field].add(option)
         # 去掉有名字冲突的
-        for field, option in alias.items():
-            if len(option) > 1:
+        for field, options in alias.items():
+            if len(options) > 1:
                 delattr(self, field)
+
+    def setup_section(self, conf, section, options):
+        for arg in options:
+            if len(arg) < 2:
+                continue
+            # section 区分大小写，option 不区分大小写
+            option = arg[0]
+            self._options[option.upper()] = OptionPack(conf, section, *arg[:-1])
+            field = OptionPack.to_field_name(option)
+            if field[0].isalpha() or can_field(field[0]):
+                yield field, option # alias[field].add(option)
+                setattr(self, field, self._options[option.upper()])
 
     def __call__(self, option: str, *args) -> OptionPack:
         """
         :param option: 需要获取的 option name
         :return: OptionPack
         """
-        if option.lower() in self._options:
-            return self._options[option.lower()](*args)
+        if option.upper() in self._options:
+            return self._options[option.upper()](*args)
         if not hasattr(self, "sections"):
             self.sections = {op.section for op in self._options.values()}
         raise Exception(f"no option:{option} in section:{','.join(self.sections)}")
@@ -83,16 +93,18 @@ class OptionInfo:
     kDefault = "DEFAULT"
 
     def __init__(self):
+        # in buf: {section: (index, ((options, default, comment) or (options, comment) or (comment), ...)}
         self.buf = {}
 
     def append(self, section, *options):
         if self.has(section):
             raise Exception(f"Option:append section:'{section}' existed.")
-        index = -1 if section.lower() == self.kDefault else len(self.buf)
-        self.buf[section.lower()] = (index, section, options)
+        index = -1 if section == self.kDefault else len(self.buf)
+        self.buf[section] = (index, options)
 
     def has(self, section):
-        return section.lower() in self.buf
+        return section in self.buf
+
 
     def get_options(self, section=None):
         """
@@ -100,7 +112,7 @@ class OptionInfo:
         :return:
             ((option, default) or (option, ), ...)
         """
-        sect = self.kDefault if section is None else section.lower()
+        sect = self.kDefault if section is None else section
         if sect == self.kDefault and self.kDefault not in self.buf:
             return tuple()
         return self.buf[sect][-1]
@@ -116,11 +128,11 @@ class OptionInfo:
             print(line)
 
     def config_data(self, *sections):
-        cs = self.buf if len(sections) == 0 else self.buf.fromkeys([s.lower() for s in sections])
-        datas = sorted(cs.values(), key=lambda x: x[0])
+        cs = self.buf if len(sections) == 0 else self.buf.fromkeys(sections)
+        datas = sorted([(v[0], k, v[-1]) for k, v in cs.items()], key=lambda x: x[0])
         for d in datas:
             yield f"[{d[1]}]"
-            for c in d[2]:
+            for c in d[-1]:
                 if len(c[-1]) > 0:
                     yield self.comment_format(c[-1])
                 num = len(c)
@@ -133,7 +145,7 @@ class EasyConfig:
     info = OptionInfo()
 
     @classmethod
-    def register(cls, section: str, *option_arg: tuple):
+    def register(cls, section: str, *option_arg):
         """
         :param section:
         :param option_arg: tuple
@@ -148,29 +160,26 @@ class EasyConfig:
         return '\n'.join(cls.info.config_data(*sections))
 
     @classmethod
-    def section_pack(cls, conf: configparser.ConfigParser, sections) -> SectionPack:
+    def section_pack(cls, conf: configparser.ConfigParser, section) -> SectionPack:
         """
         :param conf:
             configparser.ConfigParser
-        :param sections:
-            if type(sections) done
-            if type(sections) == type: sections = [c.__name__ for c in sections.mro() if c != object]
+        :param section:
+            if type(section) == str: sections = [section,]
+            if type(section) == type: sections = [c.__name__ for c in sections.mro() if c != object]
         :return:
             SectionPack
         """
-        if type(sections) == str:
-            sections = [sections, ]
-        elif type(sections) == type:
-            sections = [c.__name__ for c in sections.mro() if c != object]
+        if type(section) == str:
+            sections = [section, ]
+        elif type(section) == type:
+            sections = [c.__name__ for c in section.mro() if c != object]
             sections.reverse()
         else:
-            raise Exception(f"Bad sections type.")
+            raise Exception(f"section type not str or type")
 
-        for section in sections:
-            if not cls.info.has(section):
-                raise Exception(f"section:'{section}' has not been configured.")
-
-        if OptionInfo.kDefault not in sections:
-            sections.insert(0, OptionInfo.kDefault)
+        for sect in sections:
+            if not cls.info.has(sect):
+                raise Exception(f"section:'{sect}' has not been configured.")
 
         return SectionPack(conf, sections)
