@@ -8,6 +8,7 @@ jeack_chen@hotmail.com
 
 import configparser
 import re
+from collections import defaultdict
 from configparser import NoSectionError, NoOptionError
 
 _UNSET = object()
@@ -43,20 +44,39 @@ class OptionPack:
 
 class SectionPack:
     def __init__(self, conf, sections):
-        self.options = {}
+        self._options = {}
+        alias = defaultdict(set)
         for section in sections:
             for arg in EasyConfig.info.get_options(section):
                 if len(arg) < 2:
                     continue
-                self.options[arg[0]] = OptionPack(conf, section, *arg[:-1])
-                field = OptionPack.to_field_name(arg[0])
+                lower_option = arg[0].lower()
+                self._options[lower_option] = OptionPack(conf, section, *arg[:-1])
+                field = OptionPack.to_field_name(lower_option)
                 if field[0].isalpha() or can_field(field[0]):
-                    setattr(self, field, self.options[arg[0]])
+                    alias[field].add(lower_option)
+                    setattr(self, field, self._options[lower_option])
+        # 去掉有名字冲突的
+        for field, option in alias.items():
+            if len(option) > 1:
+                delattr(self, field)
 
-    def __call__(self, option):
-        if option in self.options:
-            return self.options[option]
-        raise Exception(f"no option:{option}")
+    def __call__(self, option: str, *args) -> OptionPack:
+        """
+        :param option: 需要获取的 option name
+        :return: OptionPack
+        """
+        if option.lower() in self._options:
+            return self._options[option.lower()](*args)
+        if not hasattr(self, "sections"):
+            self.sections = {op.section for op in self._options.values()}
+        raise Exception(f"no option:{option} in section:{','.join(self.sections)}")
+
+    def all_options(self):
+        res = defaultdict(list)
+        for op in self._options.values():
+            res[op.section].append(op.option)
+        return res
 
 
 class OptionInfo:
@@ -68,18 +88,19 @@ class OptionInfo:
     def append(self, section, *options):
         if self.has(section):
             raise Exception(f"Option:append section:'{section}' existed.")
-        index = -1 if section.upper() == self.kDefault else len(self.buf)
-        self.buf[section.upper()] = (index, section, options)
+        index = -1 if section.lower() == self.kDefault else len(self.buf)
+        self.buf[section.lower()] = (index, section, options)
 
     def has(self, section):
-        return section.upper() in self.buf
+        return section.lower() in self.buf
 
     def get_options(self, section=None):
         """
         :param section:
         :return:
+            ((option, default) or (option, ), ...)
         """
-        sect = self.kDefault if section is None else section.upper()
+        sect = self.kDefault if section is None else section.lower()
         if sect == self.kDefault and self.kDefault not in self.buf:
             return tuple()
         return self.buf[sect][-1]
@@ -95,7 +116,7 @@ class OptionInfo:
             print(line)
 
     def config_data(self, *sections):
-        cs = self.buf if len(sections) == 0 else self.buf.fromkeys([s.upper() for s in sections])
+        cs = self.buf if len(sections) == 0 else self.buf.fromkeys([s.lower() for s in sections])
         datas = sorted(cs.values(), key=lambda x: x[0])
         for d in datas:
             yield f"[{d[1]}]"
@@ -112,18 +133,30 @@ class EasyConfig:
     info = OptionInfo()
 
     @classmethod
-    def register(cls, section, *option_arg):
-        cls.info.append(section.upper(), *option_arg)
+    def register(cls, section: str, *option_arg: tuple):
+        """
+        :param section:
+        :param option_arg: tuple
+            ((option, default, comment) or (option, comment) or (comment,), ...)
+        :return: cls
+        """
+        cls.info.append(section, *option_arg)
         return cls
 
     @classmethod
-    def section_pack(cls, conf: configparser.ConfigParser, sections):
+    def get_info(cls, *sections):
+        return '\n'.join(cls.info.config_data(*sections))
+
+    @classmethod
+    def section_pack(cls, conf: configparser.ConfigParser, sections) -> SectionPack:
         """
         :param conf:
+            configparser.ConfigParser
         :param sections:
             if type(sections) done
             if type(sections) == type: sections = [c.__name__ for c in sections.mro() if c != object]
         :return:
+            SectionPack
         """
         if type(sections) == str:
             sections = [sections, ]
@@ -131,7 +164,7 @@ class EasyConfig:
             sections = [c.__name__ for c in sections.mro() if c != object]
             sections.reverse()
         else:
-            raise Exception(f"Bad sections.")
+            raise Exception(f"Bad sections type.")
 
         for section in sections:
             if not cls.info.has(section):

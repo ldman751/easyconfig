@@ -1,0 +1,55 @@
+[v 1.0.0]
+easyconfig项目发展于来自于option_manager。
+option_manager项目，起初是想简化configparser的操作，并未深入了解configparser的特性，有许多不足，因此废弃了。
+easyconfig项目延用了option_manager项目中的 OptionPack & OptionInfo,添加了SectionPack和EasyConfig。
+
+1. OptionPack 与 ini配置文件的option对应。用户不需考虑 OptionPack 的创建。 可以操作实例方法：__call__，读取配置。
+    # op 为OptionPack 实例
+    # 读取 option 的配置
+    op()
+
+    #
+    op("default")
+
+2. SectionPack，包含配置section下的所有 option (OptionPack)，以及default_section下的 option
+2.1  重载了实例方法: __call__(option) -> OptionPack
+    # sp 为 SectionPack 实例
+    # 取得 option 对应的 OptionPack 实例。
+    sp('option')
+
+2.2 将 option 添加为SectionPack的实例属性
+    # 按属性获取 option 对应的 OptionPack 实例。
+    # option 名称转化为属性名称的方法：re.sub(r'\W', '_', option.strip().upper())
+    # 注意：如果option名称转化后，不符合属性名称要求，只能调用: __call__ 方法来获取
+    sp.OPTION
+
+3. EasyConfig 提供两个类方法
+3.1 register(section:str,
+            (option:str, default, comment:str) or (option:str, comment:str) or (comment:str),
+            ...)
+     只有注册了的section，才能进行后续操作。
+
+3.2 section_pack(conf:ConfigParser, section) -> SectionPack:
+    section 为 str 时，会找已注册的 section:options 以及 default_section:option 创建：SectionPack
+    section 为 type 时，遍历 section 基类，用这些类名对应的options 以及 default_section:option 创建：SectionPack。
+
+3.3 get_info(*sections) -> str
+    返回 sections 对应的配置信息。
+
+[v 1.0.1]
+1. SectionPack
+    修改 :__call__(self, option) -> OptionPack
+      to __call__(self, option, *args) -> str
+
+    读取配置方式更简化：
+        # sp 为 SectionPack 实例
+        sp('option')()  ==>  sp('option')
+        sp('option')('default')  ==>  sp('option', 'default')
+
+2. SectionPack Bug修复：
+    if to_field_name(option1) == to_field_name(option2) and option1.lower() != option2.lower():
+        不再向 SectionPack 实例，添加 option1 or option2 属性。但依然可以按以下方式读取配置：
+        # sp 为 SectionPack 实例
+        sp(option1) or sp(option1, default)
+        sp(option2) or sp(option2, default)
+

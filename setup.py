@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='easyconfig',
-    version='1.0.0',
+    version='1.0.1',
     packages=['easyconfig'],
     url='https://github.com/ldman751/easyconfig',
     license='MIT',
