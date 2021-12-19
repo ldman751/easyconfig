@@ -65,9 +65,9 @@ option x = option x: value
         self.conf.read_string(config_demo_data)
 
         a = DemoA(self.conf)
-        # 正常读取配置option_a
+        # 按属性读取配置option_a
         self.assertEqual(a.sp.OPTION_A(), self.conf.get('DemoA', 'option_a'))
-        # 正常读取配置option_a
+        # 按参数读取配置option_a
         self.assertEqual(a.sp("option_a"), self.conf.get('DemoA', 'option_a'))
 
         # 读取带默认值的 option_b

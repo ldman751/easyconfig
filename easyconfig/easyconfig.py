@@ -46,30 +46,39 @@ class OptionPack:
 class SectionPack:
     def __init__(self, conf, sections):
         self._options = {}
-        alias = defaultdict(set)
 
-        for section in sections:
-            for field, option in self.setup_section(conf, section, EasyConfig.info.get_options(section)):
-                alias[field].add(option)
         if OptionInfo.kDefault not in sections:
-            for field, option in self.setup_section(conf, sections[-1], EasyConfig.info.get_options()):
-                alias[field].add(option)
-        # 去掉有名字冲突的
-        for field, options in alias.items():
-            if len(options) > 1:
-                delattr(self, field)
+            self.setup_section(conf, sections[-1], EasyConfig.info.get_options())
+        for section in sections:
+            self.setup_section(conf, section, EasyConfig.info.get_options(section))
 
     def setup_section(self, conf, section, options):
+        alias = defaultdict(set)
+        some_name = defaultdict(set)
+
         for arg in options:
             if len(arg) < 2:
                 continue
             # section 区分大小写，option 不区分大小写
             option = arg[0]
             self._options[option.upper()] = OptionPack(conf, section, *arg[:-1])
+            some_name[option.upper()].add(option)
             field = OptionPack.to_field_name(option)
             if field[0].isalpha() or can_field(field[0]):
-                yield field, option # alias[field].add(option)
+                alias[field].add(option)
                 setattr(self, field, self._options[option.upper()])
+
+        # 检查名字冲突的
+        error = []
+        for upper_option, options in some_name.items():
+            if len(options) > 1:
+                error.append(f"Option: {','.join(options)} repeat conflict in section: {upper_option}")
+        if len(error) > 0:
+            raise Exception("\n".join(error))
+
+        for field, options in alias.items():
+            if len(options) > 1:
+                delattr(self, field)
 
     def __call__(self, option: str, *args) -> OptionPack:
         """
